@@ -181,6 +181,14 @@ def run_bo(distance, budget, seed):
                 issubclass(w.category, RuntimeWarning)
                 for w in caught
             )
+            
+            if warning_count > 0:
+                for w in caught:
+                    print(
+                    f"Seed={seed}, Distance={distance}, "
+                    f"Evaluation={len(history)+1}, "
+                    f"Warning={w.message}"
+                    )
 
             acquisition_warnings += warning_count
 
