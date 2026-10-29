@@ -1,0 +1,17 @@
+cell,acquisition,decoy,global
+a10_D1,LogEI,24,6
+a10_D1,LogPI,22,8
+a10_D1,UCB-0.5,27,3
+a10_D1,UCB-4,23,7
+a10_D4,LogEI,27,3
+a10_D4,LogPI,26,4
+a10_D4,UCB-0.5,28,2
+a10_D4,UCB-4,27,3
+a20_D4,LogEI,27,3
+a20_D4,LogPI,28,2
+a20_D4,UCB-0.5,29,1
+a20_D4,UCB-4,29,1
+a5_D4,LogEI,14,16
+a5_D4,LogPI,18,12
+a5_D4,UCB-0.5,25,5
+a5_D4,UCB-4,24,6
