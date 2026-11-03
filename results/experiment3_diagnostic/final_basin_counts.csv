@@ -1,0 +1,5 @@
+cell,acquisition,decoy,global,other
+a5_D4,LogEI,2,8,0
+a5_D4,UCB-256,1,8,1
+a5_D4,UCB-4,6,4,0
+a5_D4,UCB-64,4,6,0

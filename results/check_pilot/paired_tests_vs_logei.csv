@@ -1,0 +1,4 @@
+metric,family,cell,alternative,n_pairs,baseline_rate,alt_rate,alt_only,baseline_only,p,holm_p
+deep,primary,a10_D4,CMA-ES,10,0.3,0.3,2,2,1.0,1.0
+success,primary,a10_D4,CMA-ES,10,0.2,0.0,0,2,0.5,0.5
+branch,primary,a10_D4,CMA-ES,10,0.5,0.8,4,1,0.375,0.375

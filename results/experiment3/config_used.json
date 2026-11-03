@@ -1,13 +1,14 @@
 {
   "fixed": {
-    "budget": 200,
+    "budget": 300,
     "delta": 1.0,
     "success_tol": 0.01,
-    "n_initial": 8,
+    "n_initial": 10,
     "num_restarts": 5,
     "raw_samples": 64,
     "lower": -5.0,
-    "upper": 5.0
+    "upper": 5.0,
+    "setup": "pilot"
   },
   "invocations": [
     {
@@ -21,11 +22,14 @@
         "LogEI",
         "LogPI",
         "UCB-0.5",
-        "UCB-4"
+        "UCB-4",
+        "Random",
+        "Sobol"
       ],
       "runs": 30,
       "seed_start": 2000,
-      "workers": 3
+      "workers": 3,
+      "setup": "pilot"
     }
   ]
 }

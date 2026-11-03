@@ -1,0 +1,45 @@
+{
+  "fixed": {
+    "budget": 300,
+    "delta": 1.0,
+    "success_tol": 0.01,
+    "n_initial": 10,
+    "num_restarts": 5,
+    "raw_samples": 64,
+    "lower": -5.0,
+    "upper": 5.0,
+    "setup": "pilot"
+  },
+  "invocations": [
+    {
+      "cells": [
+        "5:4"
+      ],
+      "acquisitions": [
+        "LogEI",
+        "UCB-4",
+        "UCB-64",
+        "UCB-256"
+      ],
+      "runs": 10,
+      "seed_start": 2000,
+      "workers": 3,
+      "setup": "pilot"
+    },
+    {
+      "cells": [
+        "5:4"
+      ],
+      "acquisitions": [
+        "LogEI",
+        "UCB-4",
+        "UCB-64",
+        "UCB-256"
+      ],
+      "runs": 10,
+      "seed_start": 2000,
+      "workers": 3,
+      "setup": "pilot"
+    }
+  ]
+}

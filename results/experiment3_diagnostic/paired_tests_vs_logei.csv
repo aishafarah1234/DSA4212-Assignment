@@ -1,0 +1,10 @@
+metric,family,cell,alternative,n_pairs,baseline_rate,alt_rate,alt_only,baseline_only,p,holm_p
+deep,primary,a5_D4,UCB-256,10,0.8,0.8,0,0,1.0,1.0
+deep,primary,a5_D4,UCB-4,10,0.8,0.4,0,4,0.125,0.375
+deep,primary,a5_D4,UCB-64,10,0.8,0.6,0,2,0.5,1.0
+success,primary,a5_D4,UCB-256,10,0.7,0.3,0,4,0.125,0.375
+success,primary,a5_D4,UCB-4,10,0.7,0.4,1,4,0.375,0.75
+success,primary,a5_D4,UCB-64,10,0.7,0.6,1,2,1.0,1.0
+branch,primary,a5_D4,UCB-256,10,1.0,1.0,0,0,1.0,1.0
+branch,primary,a5_D4,UCB-4,10,1.0,1.0,0,0,1.0,1.0
+branch,primary,a5_D4,UCB-64,10,1.0,1.0,0,0,1.0,1.0
