@@ -1,0 +1,9 @@
+cell,acquisition,decoy,global
+a10_D1,CMA-ES,8,22
+a10_D1,LogEI,26,4
+a10_D2,CMA-ES,20,10
+a10_D2,LogEI,26,4
+a10_D3,CMA-ES,23,7
+a10_D3,LogEI,26,4
+a10_D4,CMA-ES,29,1
+a10_D4,LogEI,23,7

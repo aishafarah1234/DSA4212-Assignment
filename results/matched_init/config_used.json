@@ -1,0 +1,20 @@
+{
+  "source": "results\\experiment3",
+  "n_init": 10,
+  "budget": 300,
+  "cells": [
+    "5:4",
+    "10:4",
+    "20:4",
+    "10:1"
+  ],
+  "seed_start": 2000,
+  "runs": 30,
+  "verified": 120,
+  "checked": 120,
+  "unverified": [],
+  "experiment4": {
+    "path": "C:\\Users\\aksha\\courses\\DSA4212\\DSA4212-Assignment\\code\\experiment4.py",
+    "sha256": "328c10ba69a73458"
+  }
+}
