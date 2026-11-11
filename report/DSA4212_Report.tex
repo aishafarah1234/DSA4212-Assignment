@@ -1,0 +1,289 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=2.2cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{caption}
+\usepackage[colorlinks=true,citecolor=blue,urlcolor=blue,linkcolor=black]{hyperref}
+
+\setlist{itemsep=1pt,topsep=3pt,parsep=0pt}
+\captionsetup{font=small,labelfont=bf}
+\setlength{\parskip}{3pt}
+\setlength{\parindent}{0pt}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\norm}[1]{\lVert #1\rVert}
+
+\newcommand{\figbox}[3]{%
+  \IfFileExists{#1}{\includegraphics[width=#3\linewidth]{#1}}%
+  {\fbox{\parbox{#3\linewidth}{\centering\vspace{2.2cm}Placeholder: #2\vspace{2.2cm}}}}}
+
+\title{\textbf{When Does Exploration Help? Basin Width, Separation and Exploration Strategies in Bayesian Optimisation and CMA-ES}}
+\author{Aisha Farah Mohamad S Alkaf, A0281788J, e1155916@u.nus.edu \and Cho Yu Xin, A0281914B, e1156042@u.nus.edu \and Vivekanantham Bhuvaneswari Akshayaa, A0281468U, e1155596@u.nus.edu\\[4pt]
+\small Code repository: \url{https://github.com/aishafarah1234/DSA4212-Assignment}}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We examine how basin width and separation affect Bayesian Optimisation (BO) and CMA-ES on a two-basin objective, and whether stronger exploration improves performance. Under 300 objective evaluations, both methods deteriorate as the global basin narrows; CMA-ES generally also deteriorates with increasing separation. Branch visitation, deep-basin discovery and strict success reveal that finding a promising region does not ensure accurate convergence. Random and Sobol sampling frequently discover the global basin but rarely converge within it. Fixed-midpoint and common-initial-evaluation controls probe design dependence. Scheduled restarts raise discovery over the standard CMA-ES baseline, and longer intervals can raise strict success, at a fixed 300-evaluation budget. At a matched-generation budget, larger populations are directionally associated with higher deep-basin discovery on every landscape, and significantly increase strict success at the widest-separation cell, while their strict-success effect elsewhere depends on the landscape. Overall, performance depends on landscape geometry and how evaluations are divided between discovery and adaptation: with matched initial budgets, BO is better on both discovery and strict success on the easiest landscape, and CMA-ES is better on both on the tightest, so the ``refine versus explore'' split is not a fixed property of either algorithm.
+\end{abstract}
+
+%------------------------------------------------------------
+\section{Introduction}
+
+\textbf{Research question.} How do basin width and separation in multimodal objectives affect the ability of BO and CMA-ES to locate the global minimum under a fixed evaluation budget, and can exploration strategies improve performance?
+
+Black-box optimisation seeks the minimiser of $f$ without derivatives. BO builds a Gaussian Process (GP) surrogate and selects points with an acquisition function. CMA-ES samples from an adaptive multivariate normal. Their failure modes on multimodal functions differ: CMA-ES can collapse its sampling distribution into the first basin it settles in, while BO can smooth over a narrow basin if its GP never observes a point inside it. Prior comparisons on BBOB suites report mixed winners depending on landscape \cite{crebolder,santoni}, but these suites entangle basin width, depth and separation, so they cannot say which geometric property causes a failure. We study these properties with a synthetic objective whose curvature and centre separation can be varied, while using supplementary layouts to probe positional effects.
+
+\textbf{Contributions.} (i) A two-basin testbed with an analytic reference for how hard discovery is for non-adaptive sampling (Section~\ref{sec:objective}). (ii) A three-level success metric separating finding from converging (Section~\ref{sec:metrics}). (iii) Five experiments on width, separation, acquisition functions, CMA-ES restarts, and matched initialisation, together with a fixed-generation population control (Section~\ref{sec:results}). (iv) An assessment of what can and cannot be established (Sections~\ref{sec:discussion}--\ref{sec:limitations}).
+
+%------------------------------------------------------------
+\section{Background and related work}
+
+\subsection{Performance measures}
+We minimise $f$ over $\mathcal{X}\subseteq\R^d$ with budget $B$. Simple regret is $r_B=\min_{t\le B}f(x_t)-f(x^*)$. Regret alone is ambiguous here: the broad local minimum has value $0$ and the global minimum $-1$, so a regret near $1$ means ``stuck in the local basin'' while a regret near $0$ means ``found and refined the global one''. We therefore also report success rates (Section~\ref{sec:metrics}).
+
+\subsection{Bayesian Optimisation and the acquisition functions}
+BO fits a GP to the evaluated points, giving a predictive mean $\mu_t(x)$ and standard deviation $\sigma_t(x)$ at every $x$ \cite{rasmussen}. The kernel length scale controls how quickly correlation decays with distance: short scales allow rapid changes, long scales give smooth predictions. This matters for us because a narrow basin is a rapid change over a small region. If no observation falls near it, the GP has no evidence it exists and the posterior mean stays smooth there. We use BoTorch \cite{botorch}. We compare three acquisition functions for minimisation:
+\begin{itemize}
+  \item \textbf{Expected Improvement (EI)} \cite{jones} is the expected size of improvement over the current best, so it weighs both probability and magnitude. We use LogEI, a numerically stable form \cite{ament}.
+  \item \textbf{Probability of Improvement (PI)} \cite{kushner} is the probability of beating the current best, ignoring magnitude. This makes it greedy, since a near-certain tiny gain scores as well as a risky large one. We use LogPI.
+  \item \textbf{Upper Confidence Bound (UCB)} \cite{srinivas} maximises $-\mu_t(x)+\sqrt{\beta}\,\sigma_t(x)$, equivalent to minimising the lower confidence bound. $\beta$ is an explicit exploration dial: small $\beta$ follows the mean, large $\beta$ follows uncertainty.
+\end{itemize}
+These let us vary exploration pressure in a controlled way. Greater exploration is not automatically better, since evaluations spent in uncertain regions are not available to refine a promising one.
+
+\subsection{Non-adaptive sampling and Sobol sequences}
+A Sobol sequence \cite{sobol} is a deterministic low-discrepancy sequence: it places points so that each new point falls in a large remaining gap, giving much more even coverage than independent uniform draws, which clump in places and leave holes elsewhere. Scrambling \cite{owen} randomises the sequence while keeping this even-coverage property, so different seeds give different but still well-spread point sets. We use scrambled Sobol points in two roles. First, they form BO's 10-point initial design, so the GP starts with broad coverage rather than a lucky or unlucky random cluster. Second, pure Sobol and pure uniform Random sampling are non-adaptive baselines that spend all 300 evaluations covering the domain with no learning. These baselines answer an important question: if an algorithm finds the narrow basin no more often than blind coverage, its discovery is not evidence of intelligent exploration. The analytical discovery probability applies to independent uniform samples, not Sobol sequences; low discrepancy does not guarantee hitting a small basin.
+
+\subsection{CMA-ES and restarts}
+At each generation CMA-ES samples $\lambda$ candidates from $\mathcal{N}(m,\sigma^2 C)$, ranks them, and updates the mean $m$, covariance $C$ and step size $\sigma$ from the best $\mu$ \cite{cmatut}. As $\sigma$ shrinks the search commits to one region, and distant basins become effectively unreachable. Restarts counter this: IPOP-CMA-ES restarts with a growing population when a termination criterion fires \cite{auger}, and BIPOP mixes small and large populations \cite{bipop}. We test fixed-population random restarts (RR) and a scheduled IPOP-style variant (Section~\ref{sec:algorithms}).
+
+\subsection{Related work and gap}
+Crebolder \cite{crebolder} and Santoni et al.\ \cite{santoni} report landscape-dependent winners between BO and CMA-ES, with BO favoured at small budgets. Papenmeier et al.\ \cite{papenmeier} identify GP length-scale estimation and acquisition optimisation as central to BO performance, which motivates our narrow-basin focus. Hansen \cite{bipop} showed BIPOP-CMA-ES solves hard multimodal benchmarks, and trust-region BO \cite{turbo} targets local over-smoothing. None of these varies width and separation independently, nor tests whether exploration fixes the failures this exposes.
+
+\subsection{Hypotheses}
+\begin{itemize}
+  \item \textbf{H1 (width).} Narrower global basins reduce success for both algorithms: for BO because the GP may over-smooth the basin, for CMA-ES because fewer samples reach it.
+  \item \textbf{H2 (separation).} Larger separation reduces CMA-ES success because its distribution converges around the local basin. BO should be less affected because its acquisition function can target uncertain regions.
+  \item \textbf{H3 (exploration).} Larger UCB $\beta$ (relative to LogEI and LogPI) and CMA-ES restarts raise discovery, but because the budget is fixed, they may cost refinement and not improve strict success.
+\end{itemize}
+
+%------------------------------------------------------------
+\section{Methodology and experimental setup}
+
+\subsection{Objective and analytical reference}\label{sec:objective}
+We use
+\[
+f(x)=\min\bigl\{\norm{x-a}^2,\ \alpha\norm{x-b}^2-\delta\bigr\},\qquad x\in[-5,5]^2,
+\]
+with $a=(-2,0)$ the broad local basin centre, $b=(-2+d,0)$ the global basin centre, and $\delta=1$. The parameter $\alpha$ sets global-basin curvature (larger $\alpha$, narrower basin) and $d$ sets separation, so the two can be varied independently. The global minimum is $f^*=-1$. We chose a broad quadratic as the local basin so that it attracts any local method, and a quadratic for the global one so that its geometry is exactly known. In the original separation design, moving $b$ also changes its absolute position. Supplementary layouts hold the global centre fixed, $a=(-d,0), b=(0,0)$, or the midpoint fixed, $a=(-d/2,0), b=(d/2,0)$, to assess position sensitivity at $\alpha=10$.
+
+Since the local branch is never negative, $f(x)<0$ holds exactly on a disc of radius $\sqrt{\delta/\alpha}$ around $b$, covering a fraction $p=\pi\delta/(100\alpha)$ of the domain when fully inside it. For $N$ independent uniform points the discovery probability is $1-(1-p)^N$, which at $N=300$ gives about 85\%, 61\% and 38\% for $\alpha=5,10,20$. This provides a chance-level reference for independent uniform sampling, not a formal threshold for superior exploration. Strict success (regret $\le 0.01$) needs a point within $0.1/\sqrt{\alpha}$ of $b$, a region 100 times smaller in area, which explains why finding the basin is far easier than converging in it.
+
+\subsection{Algorithms}\label{sec:algorithms}
+\textbf{BO.} BoTorch 0.18.1 with a SingleTaskGP. Each run starts with 10 scrambled Sobol points (Section 2.3). Inputs are normalised inside the GP and objectives manually standardised. Acquisitions are LogEI (baseline), LogPI and UCB with $\beta\in\{0.5,4\}$, plus a diagnostic sweep $\beta\in\{4,64,256\}$. Acquisition optimisation uses 5 restarts and 64 raw samples, and numerical warnings and fallbacks are logged. Random and Sobol sampling serve as non-adaptive references.
+
+\textbf{CMA-ES.} The \texttt{cma} library (4.5.0) with an initial mean drawn uniformly from $[-5,5]^2$, $\sigma_0=2$ and default population $\lambda=6$. The baseline uses no restarts. Leftover evaluations that cannot complete a generation are sampled without further adaptation.
+
+\textbf{Restarts (Exp.\ 4).} RR (fixed $\lambda=6$) and a scheduled IPOP-style variant ($\lambda$ doubles at each restart) run at intervals of 60 and 100 evaluations. Each restart draws a new uniform mean with $\sigma_0=2$, and all strategies share the 300-evaluation budget. Restarts are scheduled rather than convergence-triggered, so this approximates IPOP rather than reproducing it. We chose scheduling because it makes the exploration/refinement split an explicit, controllable quantity.
+
+BO starts from 10 space-filling evaluations while standard CMA-ES starts from a random mean. A supplementary CMA-ES-S10 control uses BO's verified 10 Sobol evaluations within the same 300-evaluation budget, then starts CMA-ES at their best point. BO instead fits its GP to all 10 observations; hence the starting evaluations, not the optimiser states, are shared (Section~\ref{sec:confounds}).
+
+\textbf{Fixed-generation population control (Exp.\ 6).} A single-run control compares populations $\lambda\in\{6,12,24\}$ with the same targeted total generations $G=70$, so evaluations are $\lambda \times G \in \{420,840,1680\}$. Because pycma's tolerance criteria fire earlier for larger populations, completed generations differ modestly across arms; the contrast is therefore at fixed targeted rather than completed generations, which makes the observed population effect a lower bound.
+
+\subsection{Metrics}\label{sec:metrics}
+Three nested success levels, from weakest to strongest:
+\begin{itemize}
+  \item \textbf{Branch visitation:} at least one evaluation where the global quadratic is the active branch, $\alpha\norm{x-b}^2-\delta<\norm{x-a}^2$. This only means that the global formula is the lower one somewhere, which can occur at positive $f$.
+  \item \textbf{Deep-basin discovery:} at least one evaluation with $f(x)<0$, i.e.\ strictly better than the local minimum.
+  \item \textbf{Strict success:} final regret $\le 0.01$. This is 1\% of the gap between the two minima, so success means the basin was both found and refined.
+\end{itemize}
+We also report mean and median regret. The median matters because the regret distribution is bimodal (near 0 or near 1), so the mean mostly reflects the success rate. Grid coverage, runtime and warnings are supplementary diagnostics.
+
+\subsection{Experimental design}
+\begin{table}[!htbp]
+\centering\small
+\begin{tabular}{@{}p{2.3cm}p{6.4cm}p{3.6cm}r@{}}
+\toprule
+Exp. & Varied & Fixed & Runs\\
+\midrule
+1: Width & $\alpha=1,2,5,10,20,50$ & $d=4$ & 30\\
+2: Separation & $d=1,2,3,4$ & $\alpha=10$ & 30\\
+3: Acquisition & LogEI, LogPI, UCB-0.5, UCB-4, Random, Sobol & four selected landscapes & 30\\
+3b: UCB sweep & $\beta=4,64,256$ (LogEI reference) & $(\alpha,d)=(5,4)$ & 10\\
+4: Restarts & Baseline, RR, IPOP-style, Random, Sobol; intervals 60, 100 & six selected landscapes & 100\\
+5: Matched init & LogEI, CMA-ES, CMA-ES-S10 & four selected landscapes & 30\\
+6: Fixed-gen & $\lambda=6,12,24$ at $G=70$ & six selected landscapes & 30\\
+\bottomrule
+\end{tabular}
+\caption{Main experimental design. Experiments 1--5 use 300 evaluations per run; Exp.\ 6 uses $B=\lambda G$ per run. The matched-initialisation control (Exp.\ 5) uses the same 30 seeds as Exp.\ 3 for the four selected landscapes.}
+\end{table}
+Position controls use 30 runs at $\alpha=10$ and $d\in\{1,2,3,4\}$; the matched-initialisation control uses 30 runs on four selected landscapes, and shares the first 10 evaluations between LogEI and CMA-ES-S10. Experiment 4 uses 100 runs rather than 30 because restart effects on strict success were expected to be small, and 30 runs cannot resolve them. Experiments use separate seed ranges, except 3b, which reuses a subset of Exp.\ 3 seeds so runs overlap.
+
+\subsection{Statistics and reproducibility}
+Success rates carry 95% Wilson intervals, which behave better than normal approximations near 0% and 100%. Experiments 2--6 use exact McNemar tests on binary outcomes paired by seed, with Holm correction within predefined comparison families. Because BO and CMA-ES share seed indices but not initial designs, their pairing is only nominal, except for the matched-initialisation comparison in Exp. 5, where the first 10 evaluations are shared and point-by-point verified. Shared Sobol evaluations were verified against saved BO trajectories.
+
+%------------------------------------------------------------
+\section{Results}\label{sec:results}
+
+\subsection{Experiment 1: Basin width}
+Both algorithms deteriorate as the global basin narrows (Fig.~\ref{fig:exp1}). At $\alpha=1$, BO achieves mean regret 0.0008 and 100\% strict success, compared with 0.1934 and 80\% for CMA-ES. At $\alpha=10$, mean regret rises to 0.8013 and 0.8825, and strict success falls to 16.7\% and 3.3\%, respectively. Neither succeeds at $\alpha=50$, supporting H1. The change is not simply a difference in mean performance: the median regret approaches one for the harder settings, indicating that a typical run still returns a solution near the local-basin value. Discovery is not convergence: at $\alpha=10$, CMA-ES visits the global branch in 73.3\% of runs but discovers the deep basin in 23.3\% and strictly succeeds in only 3.3\%. BO visits less often (60\%) but achieves 16.7\% strict success.
+
+\begin{figure}[!htbp]
+\centering
+\figbox{fig_1.jpg}{mean regret vs curvature}{0.55}\\[4pt]
+\figbox{fig_2.jpg}{discovery and strict success vs curvature}{0.70}
+\caption{Experiment 1 ($d=4$, 30 runs per point). (a) Mean simple regret versus global basin curvature $\alpha$ (log axis), with error bars. (b) Deep-basin discovery rate (left) and strict success rate (right) for BO and CMA-ES.}
+\label{fig:exp1}
+\end{figure}
+
+\subsection{Experiment 2: Separation (\texorpdfstring{$\alpha=10$}{alpha = 10})}
+We fix $\alpha=10$ because it sits in the middle of the difficulty range, where neither algorithm is at ceiling or floor, so separation effects can show.
+
+\begin{table}[!htbp]
+\centering\small
+\begin{tabular}{@{}rcccc@{}}
+\toprule
+$d$ & CMA-ES discovery & CMA-ES strict & BO discovery & BO strict\\
+\midrule
+1 & 73.3\% & 46.7\% & 23.3\% & 0\%\\
+2 & 33.3\% & 16.7\% & 16.7\% & 16.7\%\\
+3 & 16.7\% & 3.3\% & 10\% & 0\%\\
+4 & 3.3\% & 0\% & 23.3\% & 13.3\%\\
+\bottomrule
+\end{tabular}
+\caption{Experiment 2: discovery and strict success rates at $\alpha=10$ ($n=30$ per cell).}
+\end{table}
+
+CMA-ES discovery falls from 73.3\% at $d=1$ to 3.3\% at $d=4$, whereas BO discovery is non-monotonic (Table~2). At $d=1$, CMA-ES significantly exceeds BO in discovery and strict success (Holm-adjusted $p<0.001$); no significant difference is found at larger separations. Mean regret favours CMA-ES at $d=1$ (0.376 versus 0.816) and BO at $d=4$ (0.771 versus 0.981). Because the original layout moves the global centre as $d$ changes, we tested two alternative placements. The symmetric fixed-midpoint layout closely reproduces the original CMA-ES discovery pattern (73.3\%, 33.3\%, 23.3\%, 3.3\% versus 73.3\%, 33.3\%, 16.7\%, 3.3\% at $d=1,2,3,4$). With the global centre fixed, CMA-ES instead declines from 53.3\% to 20.0\%; moving the local centre also changes its boundary proximity. LogEI shows no monotonic trend. CMA-ES exceeds LogEI at $d=1$ in both controls (Holm-adjusted $p=0.00110$ and $0.000160$), but not significantly at larger distances. The cross-layout patterns are descriptive, not directly tested by a single paired statistic. The fixed-global placement holds $b$ constant while moving $a$, so its divergence is consistent with the local basin's boundary proximity rather than with separation, and we treat it as a diagnostic. The fixed-midpoint placement moves $b$ with $d$ while holding the pair symmetric and both centres at constant boundary margin; the close agreement with the original trend therefore indicates that the trend is driven by separation, not by the global centre's absolute position.
+
+\subsection{Experiment 3: BO acquisition functions}
+\textbf{Landscape difficulty.} At $d=4$, raising $\alpha$ from 5 to 20 reduces deep discovery for every acquisition function. LogEI falls from 80\% to 10\% and UCB-4 from 23.3\% to 3.3\% (Fig.~\ref{fig:exp3}a). At $(\alpha,d)=(5,4)$ LogEI (80\% discovery, 70\% strict success) significantly outperforms LogPI (50\%, 40\%), UCB-0.5 (20\%, 13.3\%) and UCB-4 (23.3\%, 23.3\%) on both measures (Holm-adjusted $p$ from $9\times10^{-5}$ to $0.039$). On the other landscapes no alternative significantly improves strict success over LogEI. At $\alpha=10$, LogEI discovery rises from 16.7\% at $d=1$ to 26.7\% at $d=4$ while other acquisitions decline; these descriptive trends have substantial sampling uncertainty.
+
+\begin{figure}[!htbp]
+\centering
+\begin{minipage}{0.48\linewidth}\centering
+\figbox{fig_3.jpg}{discovery}{0.98}
+\end{minipage}\hfill
+\begin{minipage}{0.48\linewidth}\centering
+\figbox{fig_4.jpg}{strict success}{0.98}
+\end{minipage}
+\caption{Experiment 3 ($d=4$). (a) Global basin discovery rate and (b) strict success rate against curvature $\alpha\in\{5,10,20\}$ (horizontal axis), for each acquisition function.}
+\label{fig:exp3}
+\end{figure}
+
+\textbf{Discovery versus convergence.} At $(5,4)$, Random and Sobol have higher observed discovery (86.7\% and 93.3\%) than LogEI (80\%), though not significantly so after Holm correction. LogEI nonetheless reaches 70\% strict success against 0\% for both references (adjusted $p<0.001$). This matches the 85\% geometric prediction for uniform sampling; Random and Sobol reach 86.7\% and 93.3\%, LogEI 80\%, so on this cell BO's discovery is at or slightly below chance while its refinement is far better.
+
+\subsection{Experiment 4: CMA-ES restarts}
+At 300 evaluations, scheduled RR and IPOP-style restarts improve discovery over standard CMA-ES on all six landscapes (Holm-adjusted $p<0.05$). At $(\alpha,d)=(10,4)$, discovery rises from 14\% to 55\% (RR-60), 54\% (IPOP-60), 36\% (RR-100), and 43\% (IPOP-100). Longer intervals can improve refinement: at $(5,4)$, RR strict success rises from 5\% at interval 60 to 25\% at interval 100. Interval contrasts are descriptive, not directly paired. This matters because a restart trades additional independent starting locations against fewer generations of local adaptation. The 60-evaluation schedule allocates more of the budget to repeated exploration, whereas the 100-evaluation schedule permits longer refinement within each segment. Population width and adaptation time are confounded across the IPOP and RR arms of this design; the fixed-generation control in Section~\ref{sec:fixedgen} separates the two, and shows that population width is directionally associated with higher discovery on every landscape (though not individually significant at $n=30$) and with a significant strict-success increase at $(10,1)$.
+
+\begin{figure}[!htbp]
+\centering
+\begin{minipage}{0.48\linewidth}\centering
+\figbox{fig_5.jpg}{discovery}{0.98}
+\end{minipage}\hfill
+\begin{minipage}{0.48\linewidth}\centering
+\figbox{fig_6.jpg}{strict success}{0.98}
+\end{minipage}
+\caption{Experiment 4 (300 evaluations; 100 runs per bar). (a) Global basin discovery rate and (b) strict success rate for RR and IPOP-style restarts at intervals of 60 and 100, on each of the six landscapes $(\alpha,d)$.}
+\label{fig:exp4}
+\end{figure}
+
+\subsection{Experiment 5: Matched initialisation}\label{sec:matched}
+BO starts from 10 scrambled Sobol points, standard CMA-ES from one random mean. To isolate the initial-design contribution, we give CMA-ES the same first 10 Sobol points as the saved LogEI runs (same seed, same construction, point-by-point verified), charge them to its 300-evaluation budget, and start it from the argmin (CMA-ES-S10). The comparison against LogEI is genuinely paired on those first 10 evaluations; the comparison against standard CMA-ES shares only the seed index. Table~\ref{tab:matched} reports the paired differences.
+
+\begin{table}[!htbp]
+\centering\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+Cell & LogEI disc. & S10 disc. & LogEI strict & S10 strict\\
+\midrule
+$(5,4)$ & 80.0\% & 20.0\% & 70.0\% & 6.7\%\\
+$(10,4)$ & 26.7\% & 13.3\% & 13.3\% & 3.3\%\\
+$(20,4)$ & 10.0\% & 6.7\% & 3.3\% & 3.3\%\\
+$(10,1)$ & 16.7\% & 73.3\% & 0.0\% & 36.7\%\\
+\bottomrule
+\end{tabular}
+\caption{Matched-initialisation comparison ($n=30$ per cell). LogEI and CMA-ES-S10 share the first 10 evaluations; the comparison isolates the starting design from the search algorithm.}
+\label{tab:matched}
+\end{table}
+
+At $(5,4)$ LogEI reaches 80\% discovery and 70\% strict success against 20\% and 6.7\% for CMA-ES-S10; at $(10,1)$ the direction reverses, with CMA-ES-S10 at 73.3\% and 36.7\% against 16.7\% and 0\%. At $(10,4)$ and $(20,4)$ neither difference survives Holm correction. The direction of the BO--CMA-ES comparison therefore depends on the landscape even when the initial evaluation budget is equalised; what generalises is that the two success metrics diverge. The comparison matches initial evaluated locations, not information use: BO fits its GP to all ten observations, whereas CMA-ES-S10 starts at their best, and the ten shared evaluations are not available for adaptation. Any difference between the two arms therefore combines the initial design with the allocation of the remaining budget.
+
+\subsection{Experiment 6: Fixed-generation population control}\label{sec:fixedgen}
+Experiment 4's IPOP and RR arms differ in both population width and adaptation time, so the 300-evaluation comparison cannot isolate the two. To separate them, we ran a fixed-generation control: three single-run CMA-ES arms with populations $\lambda\in\{6,12,24\}$, each targeting the same total number of generations $G=70$ (420, 840, and 1680 evaluations respectively). Because each arm completes the same number of generations in a single run, the arms differ only in population width and in total evaluations, and any difference in success rates is attributable to the population rather than to adaptation time.
+
+\begin{table}[!htbp]
+\centering\footnotesize
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+ & $(5,4)$ & $(10,1)$ & $(10,2)$ & $(10,3)$ & $(10,4)$ & $(20,4)$\\
+\midrule
+Disc.\ $\lambda=6$  & 26.7\% & 83.3\% & 16.7\% & 20.0\% & 10.0\% & 10.0\% \\
+Disc.\ $\lambda=12$ & 23.3\% & 90.0\% & 40.0\% & 20.0\% & 16.7\% & 13.3\% \\
+Disc.\ $\lambda=24$ & 50.0\% & 100\%  & 56.7\% & 43.3\% & 40.0\% & 20.0\% \\
+\midrule
+Succ.\ $\lambda=6$  & 13.3\% & 36.7\% & 10.0\% & 0\%    & 6.7\%  & 0\% \\
+Succ.\ $\lambda=12$ & 3.3\%  & 63.3\% & 3.3\%  & 0\%    & 0\%    & 0\% \\
+Succ.\ $\lambda=24$ & 13.3\% & 90.0\% & 10.0\% & 0\%    & 0\%    & 0\% \\
+\bottomrule
+\end{tabular}
+\caption{Fixed-generation population control ($G=70$, one run per arm, $n=30$ per cell). Disc.\ = deep-basin discovery; Succ.\ = strict success. The Holm-significant values are named in the text.}
+\label{tab:fixedgen}
+\end{table}
+
+Directionally, deep-basin discovery is at least as high at $\lambda=24$ as at $\lambda=6$ on every cell, and the increase is largest at $(10,2)$ (16.7\% to 56.7\%), $(10,4)$ (10.0\% to 40.0\%), and $(10,3)$ (20.0\% to 43.3\%). After Holm correction, however, no discovery comparison reaches the 5\% threshold; the closest is $(10,2)$ at Holm-adjusted $p=0.075$. The discovery trend is therefore consistent but not individually significant at $n=30$. Strict success shows one clear $\lambda$ effect: at $(10,1)$ it rises from 36.7\% at $\lambda=6$ to 90.0\% at $\lambda=24$ (Holm-adjusted $p=0.0026$), the only Holm-significant comparison in the table. On $(10,4)$ strict success instead falls from 6.7\% to 0\%, but the difference is not significant; on $(5,4)$, $(10,2)$, $(10,3)$ and $(20,4)$ it is noisy or null. The completed-generation counts differ modestly across arms (mean 70.0, 58.5, and 47.5 for $\lambda=6,12,24$), because pycma's tolerance criteria fire earlier for larger populations; the contrast is therefore at fixed targeted rather than completed generations, and the observed population effect on discovery is a lower bound. The 300-evaluation IPOP-vs-RR difference in Section~\ref{sec:results} is therefore a discovery effect of population width, directionally consistent across landscapes but not individually significant at our sample size, and its effect on strict success is landscape-dependent.
+
+%------------------------------------------------------------
+\section{Discussion}\label{sec:discussion}
+
+\subsection{Discovery versus convergence}
+The central result is that finding the deep basin does not guarantee convergence. At $(5,4)$, Random and Sobol discover it in 86.7\% and 93.3\% of runs but never strictly succeed, whereas LogEI reaches 70\% strict success. Sobol exceeds the 85\% analytic prediction for 300 uniform samples because low-discrepancy coverage is more even than independent uniform draws; Random matches it (86.7\%); LogEI falls below it (80\%). On this cell, then, BO's discovery is at or slightly below chance, not merely ``no better than chance'', and its advantage is confined to refinement. The three nested metrics make this visible: branch visitation measures entry into the global branch, deep discovery requires an objective value below the local minimum, and strict success requires reaching a much smaller neighbourhood of the global optimum. Reporting only one of these outcomes would obscure important algorithmic differences. The matched-initialisation comparison (Section~\ref{sec:matched}) shows that the ``BO refines, CMA-ES explores'' narrative is landscape-dependent: at $(5,4)$ BO is better on both metrics once the initial budget is equalised, and at $(10,1)$ the direction reverses; what generalises is that the two success metrics diverge.
+
+\subsection{Geometry and initialisation}\label{sec:confounds}
+CMA-ES's separation trend is consistent with concentration around the local basin; BO's narrow-basin failures may reflect GP over-smoothing, but neither mechanism was directly logged. The two mechanisms predict different signatures, and the observed rates are consistent with each: BO's discovery collapses faster than CMA-ES's as $\alpha$ grows (Fig.~\ref{fig:exp1}), consistent with GP over-smoothing; CMA-ES visits the global branch more often than it discovers the deep basin (73.3\% vs 23.3\% at $\alpha=10$, Section~\ref{sec:results}), consistent with concentration around the local basin rather than failure to reach the narrow region. The fixed-midpoint layout reproduces the declining CMA-ES discovery pattern even though $b$'s absolute position changes with $d$, so the trend is attributable to separation rather than to the global centre's placement. The fixed-global layout gives a shallower decline, consistent with the local centre's proximity to the boundary confounding that arm; we therefore use it as a position diagnostic rather than as a separation estimate. The matched-initialisation comparison in Section~\ref{sec:matched} quantifies the initial-design contribution: on the easiest landscape, BO's advantage over CMA-ES-S10 survives the matching, and on the tightest landscape the CMA-ES arm reverses it. BO fits its GP to all ten observations, whereas CMA-ES-S10 starts at their best, so information use still differs even when the evaluation budget is equalised.
+
+\subsection{Exploration--refinement trade-off}\label{sec:explore}
+Higher UCB exploration increases coverage and discovery in the small diagnostic but does not monotonically increase strict success. Similarly, restarts increase CMA-ES discovery while shortening the adaptation time available per segment; longer intervals raise strict success at the cost of discovery. The fixed-generation control in Section~\ref{sec:fixedgen} shows that the discovery side of this trade-off is directionally attributable to population width: at fixed targeted generations, $\lambda=24$ discovers the deep basin more often than $\lambda=6$ on every landscape, though no individual discovery comparison survives Holm correction at $n=30$. The one significant comparison is on strict success at $(10,1)$, where $\lambda=24$ more than doubles the $\lambda=6$ rate; at $(10,4)$ success moves in the opposite direction but not significantly. The trade-off is therefore not uniformly adverse, and its strict-success component is landscape-dependent. Neither discovery nor mean regret alone fully describes optimisation quality: locating a promising region and refining it within the budget are different challenges.
+
+%------------------------------------------------------------
+\section{Limitations and future work}\label{sec:limitations}
+The synthetic, noiseless two-dimensional testbed limits generalisability. Most BO cells use 30 seeds and the UCB diagnostic only ten. The fixed-global layout also changes the local basin's boundary proximity; shared Sobol evaluations do not equalise subsequent information use. The 300-evaluation restart design confounds population width and adaptation time; the fixed-generation control in Section~\ref{sec:fixedgen} isolates the two directionally, but no individual discovery comparison survives Holm correction at $n=30$. The one significant comparison is strict success at $(10,1)$, where $\lambda=24$ exceeds $\lambda=6$; the strict-success effect at other cells is landscape-dependent and not individually significant. The IPOP-style schedules are not convergence-triggered; objective-evaluation budgets also ignore substantial differences in computational overhead. The experiments also use a single synthetic objective family and a small set of manually selected landscape configurations, so results should not be extrapolated to arbitrary multimodal objectives. Future work should examine higher dimensions, noise, adaptive restarts, and logged GP length scales and CMA-ES covariance dynamics to test the proposed mechanisms directly.
+
+%------------------------------------------------------------
+\section{Conclusion}
+Both BO and CMA-ES struggle as the global basin narrows; CMA-ES discovery also generally declines as separation grows, with sensitivity to basin placement. The strongest finding is that discovery and strict success are distinct: non-adaptive sampling often finds the basin without refining it, while restarts can improve discovery without reliably improving convergence. The fixed-midpoint control reproduces the separation trend, while matched initial evaluations reveal landscape-dependent algorithm rankings. At fixed targeted generations, larger populations are directionally associated with higher deep-basin discovery on every landscape, but the comparison is individually significant only for strict success at $(10,1)$, where $\lambda=24$ more than doubles the $\lambda=6$ rate. The exploration--refinement trade-off is therefore attributable to population width for discovery in direction, and to population width for convergence at the widest-separation cell, but not uniformly to population width for convergence.
+
+In practice, the choice between the two algorithms is landscape-dependent: at small separation and wide curvature, BO is the better choice on both discovery and strict success, provided the two are given the same initial evaluation budget. At large separation and narrow curvature, neither algorithm is reliable, and additional exploration (restarts, larger UCB $\beta$) raises discovery without reliably raising strict success.
+
+%------------------------------------------------------------
+\begin{thebibliography}{99}\small
+\setlength{\itemsep}{1pt}
+
+\bibitem{crebolder} Crebolder, D. (2018). Sample-Efficient Optimizers: Bayesian Optimization vs.\ CMA-ES. Research paper, Vrije Universiteit Amsterdam.
+\bibitem{santoni} Santoni, M. L., Raponi, E., De Leone, R., \& Doerr, C. (2024). Comparison of High-Dimensional Bayesian Optimization Algorithms on BBOB. \emph{ACM TELO}, 4(3). \url{https://doi.org/10.1145/3670683}
+\bibitem{rasmussen} Rasmussen, C. E., \& Williams, C. K. I. (2006). \emph{Gaussian Processes for Machine Learning}. MIT Press.
+\bibitem{botorch} Balandat, M., et al. (2020). BoTorch: A Framework for Efficient Monte-Carlo Bayesian Optimization. \emph{NeurIPS}.
+\bibitem{jones} Jones, D. R., Schonlau, M., \& Welch, W. J. (1998). Efficient Global Optimization of Expensive Black-Box Functions. \emph{Journal of Global Optimization}, 13, 455--492.
+\bibitem{ament} Ament, S., Daulton, S., Eriksson, D., Balandat, M., \& Bakshy, E. (2023). Unexpected Improvements to Expected Improvement for Bayesian Optimization. \emph{NeurIPS}.
+\bibitem{kushner} Kushner, H. J. (1964). A New Method of Locating the Maximum Point of an Arbitrary Multipeak Curve in the Presence of Noise. \emph{Journal of Basic Engineering}, 86, 97--106.
+\bibitem{srinivas} Srinivas, N., Krause, A., Kakade, S., \& Seeger, M. (2010). Gaussian Process Optimization in the Bandit Setting: No Regret and Experimental Design. \emph{ICML}.
+\bibitem{sobol} Sobol', I. M. (1967). On the Distribution of Points in a Cube and the Approximate Evaluation of Integrals. \emph{USSR Computational Mathematics and Mathematical Physics}, 7(4), 86--112.
+\bibitem{owen} Owen, A. B. (1998). Scrambling Sobol' and Niederreiter--Xing Points. \emph{Journal of Complexity}, 14(4), 466--489.
+\bibitem{cmatut} Hansen, N. (2016). The CMA Evolution Strategy: A Tutorial. arXiv:1604.00772.
+\bibitem{auger} Auger, A., \& Hansen, N. (2005). A Restart CMA Evolution Strategy with Increasing Population Size. \emph{IEEE CEC}.
+\bibitem{bipop} Hansen, N. (2009). Benchmarking a BI-Population CMA-ES on the BBOB-2009 Function Testbed. \emph{GECCO}. \url{https://doi.org/10.1145/1570256.1570333}
+\bibitem{papenmeier} Papenmeier, L., Poloczek, M., \& Nardi, L. (2025). Understanding High-Dimensional Bayesian Optimization. \emph{ICML}, PMLR 267. arXiv:2502.09198.
+\bibitem{turbo} Eriksson, D., Pearce, M., Gardner, J., Turner, R., \& Poloczek, M. (2019). Scalable Global Optimization via Local Bayesian Optimization. \emph{NeurIPS}.
+
+\end{thebibliography}
+
+\end{document}
