@@ -9,7 +9,7 @@ It also examines whether alternative BO acquisition functions and CMA-ES restart
 **1. Clone the project repository:**
 
 ```bash
-git clone https://github.com/<your-github-username>/DSA4212-Assignment.git
+git clone https://github.com/aishafarah1234/DSA4212-Assignment.git
 ```
 
 **2. Navigate to the project directory:**
@@ -126,7 +126,7 @@ Note: matched_init.py imports experiment4.py and calls e4.cma_run for its standa
 
 #### Experiment 6 - Fixed-generation population control:
 
-Three single-run CMA-ES arms with populations λ ∈ {6, 12, 24}, each targeting the same total number of generations G = 70. Because each arm completes the same number of generations in a single run, the arms differ only in population width and total evaluations. Note that pycma's tolerance criteria fire earlier for larger populations, so completed generations differ modestly across arms (mean 70.0, 58.5, 47.5 for λ = 6, 12, 24); the contrast is at fixed targeted generations, and the observed population effect on discovery is therefore a lower bound.
+Three single-run CMA-ES arms with populations λ ∈ {6, 12, 24}, each targeting the same total number of generations G = 70. The arms differ in population width and total evaluation budgets. Note that pycma's tolerance criteria fire earlier for larger populations, so completed generations differ across arms (mean 69.9, 57.9, and 46.5 for λ = 6, 12, 24); the contrast is therefore at fixed targeted rather than completed generations.
 
 ```bash
 python code/experiment4_fixedgen.py --workers 3
